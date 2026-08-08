@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Traffic Data Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "type": { "type": "string", "const": "traffic_update" },
+    "version": { "type": "string" },
+    "simulation": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["running", "paused"] },
+        "time": { "type": "number" },
+        "mode": { "type": "string", "enum": ["baseline", "optimized"] }
+      },
+      "required": ["status", "time"]
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "avgWait": { "type": "number" },
+        "queueLength": { "type": "number" },
+        "vehicleCount": { "type": "number" },
+        "throughput": { "type": "number" },
+        "avgSpeed": { "type": "number" },
+        "efficiency": { "type": "number" },
+        "co2": { "type": "number" }
+      }
+    },
+    "junctions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "position": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "aiControlActive": { "type": "boolean" },
+          "overallCongestion": { "type": "string", "enum": ["free","moderate","heavy","severe"] }
+        },
+        "required": ["id","position"]
+      }
+    },
+    "roads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "coordinates": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "congestion": { "type": "string", "enum": ["free","moderate","heavy","severe"] }
+        },
+        "required": ["id","coordinates"]
+      }
+    },
+    "prediction": { "type": "object" },
+    "emergency": { "type": "object" },
+    "comparison": { "type": "object" },
+    "chartHistory": { "type": "array" }
+  },
+  "required": ["type"]
+}
