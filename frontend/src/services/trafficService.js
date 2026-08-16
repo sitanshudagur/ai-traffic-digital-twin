@@ -1,22 +1,48 @@
 /**
  * Traffic data service layer.
- *
- * Currently uses mock data. To connect FastAPI WebSocket:
- * 1. Replace MockTrafficService with WebSocketTrafficService
- * 2. Use socketClient.js to receive normalized traffic_update messages
- * 3. UI components remain unchanged — they consume normalized state only
+ * Connects to live FastAPI WebSocket with fallback to mock data.
  */
 
 import { initialTrafficState } from '../data/mockTrafficData';
+import { createSocketClient } from './socketClient';
 
 function deepClone(state) {
   return JSON.parse(JSON.stringify(state));
 }
 
-class MockTrafficService {
+class TrafficService {
   constructor() {
     this.state = deepClone(initialTrafficState);
     this.listeners = new Set();
+    this.isLiveConnected = false;
+    this.connectionListeners = new Set();
+
+    // Initialize live WebSocket client
+    this.client = createSocketClient('ws://127.0.0.1:8000/ws');
+    this.client.onOpen(() => {
+      this.isLiveConnected = true;
+      console.log('[trafficService] Connected to live Digital Twin backend');
+      this.notifyConnection(true);
+    });
+
+    this.client.onClose(() => {
+      this.isLiveConnected = false;
+      console.log('[trafficService] Disconnected from backend, operating in offline/mock mode');
+      this.notifyConnection(false);
+    });
+
+    this.client.onMessage((data) => {
+      if (data?.type === 'traffic_update') {
+        const normalized = this.normalizeWebSocketMessage(data);
+        this.state = normalized;
+        this.notify();
+      }
+    });
+
+    // Auto-connect WebSocket in browser environment
+    if (typeof window !== 'undefined') {
+      this.client.connect();
+    }
   }
 
   getState() {
@@ -28,8 +54,18 @@ class MockTrafficService {
     return () => this.listeners.delete(listener);
   }
 
+  subscribeConnection(listener) {
+    this.connectionListeners.add(listener);
+    listener(this.isLiveConnected);
+    return () => this.connectionListeners.delete(listener);
+  }
+
   notify() {
     this.listeners.forEach((fn) => fn(this.state));
+  }
+
+  notifyConnection(status) {
+    this.connectionListeners.forEach((fn) => fn(status));
   }
 
   setState(updater) {
@@ -42,16 +78,21 @@ class MockTrafficService {
     this.notify();
   }
 
+  sendAction(action, payload = {}) {
+    if (this.isLiveConnected) {
+      this.client.send({ action, ...payload });
+    }
+  }
+
   /**
-   * Future: normalize WebSocket payload from FastAPI
-   * @param {object} message - e.g. { type: "traffic_update", simulation_time, metrics, junctions, ... }
+   * Normalizes incoming WebSocket payload from FastAPI backend to match frontend state.
    */
   normalizeWebSocketMessage(message) {
     return {
       simulation: {
-        status: message.status ?? this.state.simulation.status,
-        time: message.simulation_time ?? this.state.simulation.time,
-        mode: message.mode ?? this.state.simulation.mode,
+        status: message.simulation?.status ?? message.status ?? this.state.simulation.status,
+        time: message.simulation?.time ?? message.simulation_time ?? this.state.simulation.time,
+        mode: message.simulation?.mode ?? message.mode ?? this.state.simulation.mode,
       },
       metrics: message.metrics ?? this.state.metrics,
       junctions: message.junctions ?? this.state.junctions,
@@ -65,5 +106,5 @@ class MockTrafficService {
   }
 }
 
-export const trafficService = new MockTrafficService();
+export const trafficService = new TrafficService();
 export default trafficService;
